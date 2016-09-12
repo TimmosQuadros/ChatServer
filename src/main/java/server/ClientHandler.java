@@ -8,10 +8,7 @@ package server;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.Hashtable;
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,7 +46,7 @@ public class ClientHandler extends Thread {
             String message = input.nextLine(); //IMPORTANT blocking call
             //System.out.println(String.format("Received the message: %1$S ", message));
             Logger.getLogger(Log.LOG_NAME).log(Level.INFO, String.format("Received the message: %1$S ", message));
-            while (!message.equals(ProtocolStrings.LOGOUT)) {
+            while (!message.equals(ProtocolStrings.LOGOUT + ":")) {
                 parseMessage(message);
                 //System.out.println(String.format("Received the message: %1$S ", message.toUpperCase()));
                 Logger.getLogger(Log.LOG_NAME).log(Level.INFO, String.format("Received the message: %1$S ", message.toUpperCase()));
@@ -70,71 +67,76 @@ public class ClientHandler extends Thread {
     }
 
     private synchronized void parseMessage(String message) {
-        String[] splitColon = message.split(":");
-        String messageArgument = splitColon[0];
-        String response;
-        if (messageArgument.equalsIgnoreCase(ProtocolStrings.LOGIN)) {
-            username = splitColon[1];
-            clients.putIfAbsent(username, this);
-            response = ProtocolStrings.CLIENTLIST + ":";
-            Enumeration<String> usernames = clients.keys();
+        try {
 
-            while (usernames.hasMoreElements()) {
-                response += usernames.nextElement() + ",";
-            }
+            String[] splitColon = message.split(":");
+            String messageArgument = splitColon[0];
+            String response;
+            if (messageArgument.equalsIgnoreCase(ProtocolStrings.LOGIN)) {
+                username = splitColon[1];
+                clients.putIfAbsent(username, this);
+                response = ProtocolStrings.CLIENTLIST + ":";
+                Enumeration<String> usernames = clients.keys();
 
-            response = response.substring(0, response.length() - 1);
+                while (usernames.hasMoreElements()) {
+                    response += usernames.nextElement() + ",";
+                }
 
-            Enumeration<ClientHandler> clientHandlers = clients.elements();
-
-            while (clientHandlers.hasMoreElements()) {
-                ClientHandler nextElement = clientHandlers.nextElement();
-                nextElement.sendMessage(response);
-            }
-        } else if (messageArgument.equalsIgnoreCase(ProtocolStrings.SENDMESSAGE)) {
-            if (splitColon[1].equalsIgnoreCase("")) {
-                response = ProtocolStrings.MESSAGERESPONSE + ":";
-                
-                response+=username+ ":" + splitColon[2];
+                response = response.substring(0, response.length() - 1);
 
                 Enumeration<ClientHandler> clientHandlers = clients.elements();
-                
+
                 while (clientHandlers.hasMoreElements()) {
-                    ClientHandler client = clientHandlers.nextElement();
-                    client.sendMessage(response);
+                    ClientHandler nextElement = clientHandlers.nextElement();
+                    nextElement.sendMessage(response);
                 }
-            } else {
-                response = ProtocolStrings.MESSAGERESPONSE + ":";
-                
-                response+=username+ ":" + splitColon[2];
-                
-                String[] userNames = splitColon[1].split(",");
-                
+            } else if (messageArgument.equalsIgnoreCase(ProtocolStrings.SENDMESSAGE)) {
+                if (splitColon[1].equalsIgnoreCase("")) {
+                    response = ProtocolStrings.MESSAGERESPONSE + ":";
+
+                    response += username + ":" + splitColon[2];
+
+                    Enumeration<ClientHandler> clientHandlers = clients.elements();
+
+                    while (clientHandlers.hasMoreElements()) {
+                        ClientHandler client = clientHandlers.nextElement();
+                        client.sendMessage(response);
+                    }
+                } else {
+                    response = ProtocolStrings.MESSAGERESPONSE + ":";
+
+                    response += username + ":" + splitColon[2];
+
+                    String[] userNames = splitColon[1].split(",");
+
+                    Enumeration<ClientHandler> clientHandlers = clients.elements();
+
+                    for (String userName : userNames) {
+                        ClientHandler client = clients.get(userName);
+                        client.sendMessage(response);
+                    }
+                }
+            } else if (messageArgument.equalsIgnoreCase(ProtocolStrings.LOGOUT)) {
+                clients.get(username).sendMessage(ProtocolStrings.LOGOUT);
+                clients.remove(username);
+                response = ProtocolStrings.CLIENTLIST + ":";
+                Enumeration<String> usernames = clients.keys();
+
+                while (usernames.hasMoreElements()) {
+                    response += usernames.nextElement() + ",";
+                }
+
+                response = response.substring(0, response.length() - 1);
+
                 Enumeration<ClientHandler> clientHandlers = clients.elements();
-                
-                for (String userName : userNames) {
-                    ClientHandler client = clients.get(userName);
-                    client.sendMessage(response);
+
+                while (clientHandlers.hasMoreElements()) {
+                    ClientHandler nextElement = clientHandlers.nextElement();
+                    nextElement.sendMessage(response);
                 }
             }
-        } else if (messageArgument.equalsIgnoreCase(ProtocolStrings.LOGOUT)) {
-            clients.get(username).sendMessage(ProtocolStrings.LOGOUT);
-            clients.remove(username);
-            response = ProtocolStrings.CLIENTLIST + ":";
-            Enumeration<String> usernames = clients.keys();
-
-            while (usernames.hasMoreElements()) {
-                response += usernames.nextElement() + ",";
-            }
+        } catch (Exception e) {
             
-            response = response.substring(0, response.length() - 1);
-            
-            Enumeration<ClientHandler> clientHandlers = clients.elements();
-
-            while (clientHandlers.hasMoreElements()) {
-                ClientHandler nextElement = clientHandlers.nextElement();
-                nextElement.sendMessage(response);
-            }
         }
     }
 
